@@ -39,9 +39,21 @@ function _draw()
 	cls()
 	map()
 	spr(0,p1.x,p1.y)
+	camera()
+	color(7)
+	print(p1.hang)
+	color()
 end
 -->8
 -- player
+
+-- # states
+-- standing
+-- moving left or right
+-- moving down
+-- recoiling from hitblock
+-- moving up (jump)
+-- hovering
 
 function p1_make()
 	p1 = {}
@@ -54,59 +66,137 @@ function p1_make()
 	
 	p1.read_input = false
 	p1.timer = 0
+	p1.hang = 0
+	
+	p1_update = p1_stand
+end
+
+function p1_stand()
+	p1.timer=8
+	if m8get(p1.x,p1.y+8)==0 then
+		p1_update = p1_fall
+		p1_update()
+		return
+	end
+	
+	if btn(0) then
+		local t = m8get(p1.x-8,p1.y)
+		if t==0 then
+			p1.dx = -1
+			p1_update = p1_moveh
+			p1_update()
+			return
+		else
+			p1_bump_left()
+			p1_update=p1_recoil
+			p1_update()
+			return
+		end
+	end
+
+	if btn(1) then
+		local t = m8get(p1.x+8,p1.y)
+		if t==0 then
+			p1.dx = 1
+			p1_update = p1_moveh
+			p1_update()
+			return
+		else
+			p1_bump_right()
+			p1_update=p1_recoil
+			p1_update()
+			return
+		end
+	end	
+				
+	if btn(3) then
+	 p1_bump_down()			
+		p1_update=p1_recoil
+		p1_update()
+		return
+	end
+	
+	if btn(2) then
+		local t = m8get(p1.x,p1.y-8)
+		if t==0 then
+			p1_update = p1_jump
+			p1_update()
+			return
+		else
+			p1_bump_up()
+			p1_update=p1_recoil
+			p1_update()
+		end		
+	end
+end
+
+function p1_moveh()
+	p1.x += p1.dx
+	if p1.x %8 == 0 then
+		p1_update = p1_stand
+		p1_update()
+		return
+	end
+end
+
+function p1_fall()
+	p1.y += 1
+	t = m8get(p1.x,p1.y+8)
+	if t>0 then
+		p1_update=p1_stand
+		p1_update()
+		return
+	end
+end
+
+function p1_recoil()
+	p1.timer -= 1
+	if p1.timer == 0 then
+		p1_update=p1_stand
+		return
+	end
+end
+
+function p1_jump()
+	p1.y -= 1
+	if p1.y%8 == 0 then
+		p1.timer=8
+		p1_update = p1_hover
+		p1_update()
+		return
+	end
+end
+
+function p1_hover()
+	p1.timer-=1
+	if p1.timer == 0 then
+		p1_update = p1_fall
+		p1_update()
+		return
+	end
+	
+	if btn(0) then
+		local t = m8get(p1.x-8,p1.y)
+		if t==0 then
+			p1.dx = -1
+			p1_update = p1_moveh
+			p1_update()
+			return
+		end
+	end
+
+	if btn(1) then
+		local t = m8get(p1.x+8,p1.y)
+		if t==0 then
+			p1.dx = 1
+			p1_update = p1_moveh
+			p1_update()
+			return
+		end
+	end	
 end
 
 function p1_update()
-	if p1.x%8==0 and 
-	p1.y%8==0 and 
-	p1.timer == 0 then
-		p1.dx = 0
-		p1.dy = 0
-		p1.read_input = true
-	end
-	
-	if p1.read_input then
-		-- fall if possible
-		if m8get(p1.x,p1.y+8)==0 then
-			p1.dy=1
-		
-		else
-		
-		if btn(0) then
-			local t = m8get(p1.x-8,p1.y)
-			if t==0 then
-				p1.dx = -1
-			else
-				p1_bump_left()
-			end
-		end
-		
-		if btn(1) then
-			local t = m8get(p1.x+8,p1.y)
-			if t==0 then
-				p1.dx = 1
-			else
-				p1_bump_right()
-			end
-		end
-		
-		if p1.dx==0 then
-			if btn(3) then
-			 p1_bump_down()			 
-			end
-		end
-		
-		end
-		
-	end
-	
-	if p1.dx != 0 or p1.dy !=0 or p1.timer > 0 then
-		p1.read_input = false
-	end
-	
-	p1.x += p1.dx
-	p1.y += p1.dy
-	p1.timer = max(p1.timer-1,0)
 end
 
 function p1_bump_left()
@@ -122,6 +212,11 @@ end
 function p1_bump_down()
 	p1.timer=8
 	hit_block(p1.x,p1.y+8)
+end
+
+function p1_bump_up()
+	p1.timer=8
+	hit_block(p1.x,p1.y-8)
 end
 
 function hit_block(x,y)
