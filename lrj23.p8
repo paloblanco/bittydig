@@ -12,6 +12,8 @@ poke(0x5f57,8)
 poke(0x5f2c,3)
 -- poke to stop btn repeat
 poke(0x5f5c,255)
+-- get deep red
+pal(4,-8,1)
 
 function init_level()
 	-- empty lists
@@ -21,6 +23,8 @@ function init_level()
 --	air = 100
 	air_time = 180
 	time_ms = 0
+	text_boxes = {}
+	explosions = {}
 end
 
 
@@ -55,13 +59,14 @@ function update_game()
 		return
 	end
 	
-	if p1.y > 8*100 then
+	if p1.y > 8*101 then
 		--air = min(100,air+30)
 		start_level_start()
 	end
 end
 
 function draw_game()
+	pal(4,-8,1)
 	camera(cx,cy)
 	cls()
 	map()
@@ -74,12 +79,59 @@ function draw_game()
 		spr(5+h.dmg*16,h.x,h.y)
 	end
 	
-	spr(0,p1.x,p1.y)
+	--player
+	spr(p1.ix,p1.x+p1.offx,p1.y+p1.offy,1,1,not p1.faceleft)
+	
+	draw_text_boxes()
+	draw_explosions()
 	
 	camera()
 	color(7)
-	print(air)
+	print("\#7\fc"..air,1,1)
 	color()
+end
+
+function make_text_box(s,c,x,y)
+	local t = {}
+	t.s = s
+	t.c = c
+	t.x = x
+	t.y = y
+	t.timer=30
+	add(text_boxes,t)
+end
+
+function draw_text_boxes()
+	for t in all(text_boxes) do
+		print("\#7\f"..t.c..t.s,t.x,t.y)
+		t.timer -= 1
+		if (t.timer < 0) del(text_boxes,t)
+	end
+end
+
+function make_explosion(x,y)
+	local e = {}
+	e.x = x
+	e.y = y
+	e.t = 8
+	add(explosions,e)
+end
+
+function draw_explosions()
+	for e in all(explosions) do
+		x = e.x*8
+		y = e.y*8
+		if e.t > 6 then
+			rectfill(x,y,x+7,y+7,7)
+		elseif e.t > 4 then
+		
+		elseif e.t > 2 then
+			rectfill(x+1,y+1,x+6,y+6,7)
+		else
+			del(explosions,e)
+		end
+		e.t += -1
+	end
 end
 -->8
 -- player
@@ -104,6 +156,13 @@ function p1_make()
 	p1.read_input = false
 	p1.timer = 0
 	p1.hang = 0
+	p1.other = nil --for riding
+	p1.faceleft = true
+	
+	p1.ix = 0
+	p1.offx = 0
+	p1.offy = 0
+	p1.start_t = time()
 	
 	p1_update = p1_stand
 end
@@ -115,6 +174,12 @@ function p1_update()
 end
 
 function p1_stand()
+	p1.ix = 0
+	p1.offx = 0
+	p1.offy = 0
+
+	if (btnp(0) or btnp(1))	p1.start_t = time()
+
 	p1.timer=8
 	local e = empty(p1.x,p1.y+8)
 	if e then
@@ -124,6 +189,7 @@ function p1_stand()
 	end
 	
 	if btn(0) then
+		p1.faceleft = true
 		local e = empty(p1.x-8,p1.y)
 		if e then
 			p1.dx = -1
@@ -132,6 +198,8 @@ function p1_stand()
 			return
 		elseif btnp(0) then
 			p1_bump_left()
+			p1.ix = 26
+			p1.offx = -1
 			p1_update=p1_recoil
 			p1_update()
 			return
@@ -139,6 +207,7 @@ function p1_stand()
 	end
 
 	if btn(1) then
+		p1.faceleft = false
 		local e = empty(p1.x+8,p1.y)
 		if e then
 			p1.dx = 1
@@ -147,6 +216,8 @@ function p1_stand()
 			return
 		elseif btnp(1) then
 			p1_bump_right()
+			p1.ix = 26
+			p1.offx = 1
 			p1_update=p1_recoil
 			p1_update()
 			return
@@ -155,6 +226,8 @@ function p1_stand()
 				
 	if btnp(3) then
 	 p1_bump_down()			
+	 p1.ix=28
+		p1.offy=1
 		p1_update=p1_recoil
 		p1_update()
 		return
@@ -168,6 +241,8 @@ function p1_stand()
 			return
 		elseif btnp(2) then
 			p1_bump_up()
+			p1.ix=27
+			p1.offy=-1
 			p1_update=p1_recoil
 			p1_update()
 		end		
@@ -175,19 +250,26 @@ function p1_stand()
 end
 
 function p1_moveh()
+	timed = time() - p1.start_t
+	p1.ix = flr((timed*30)%6) + 8
+	if (p1.ix>14) p1.ix = 8
 	p1.x += p1.dx
 	if p1.x %8 == 0 then
 		p1_update = p1_stand
+		p1.ix=0
 		p1_update()
 		return
 	end
 end
 
 function p1_fall()
+	p1.ix = max(24,p1.x)
+	p1.ix = flr(time()*15%2) + 24
 	p1.y += 1
 	e = empty(p1.x,p1.y+8)
 	if not e then
 		p1_update=p1_stand
+		p1.ix=0
 		p1_update()
 		p1.y = 8*(p1.y\8)
 		return
@@ -196,6 +278,8 @@ end
 
 function p1_recoil()
 	p1.timer -= 1
+	if (p1.timer < 4) p1.offx, p1.offy = 0,0
+	if (p1.timer < 2) p1.ix = 0
 	if p1.timer == 0 then
 		p1_update=p1_stand
 		return
@@ -203,16 +287,33 @@ function p1_recoil()
 end
 
 function p1_jump()
+	p1.ix = max(24,p1.x)
+	p1.ix = flr(time()*15%2) + 24
 	p1.y -= 1
 	if p1.y%8 == 0 then
 		p1.timer=8
 		p1_update = p1_hover
+		p1.ix=0
 		p1_update()
 		return
 	end
 end
 
+function p1_ride()
+	p1.y = p1.other.y-8
+	e = empty(p1.x,p1.y+8)
+	if not e then
+		p1_update=p1_stand
+		p1_update()
+		p1.y = 8*(p1.y\8)
+		return
+	end
+	
+end
+
 function p1_hover()
+	p1.ix = max(24,p1.x)
+	p1.ix = flr(time()*15%2) + 24
 	p1.timer-=1
 	if p1.timer == 0 then
 		p1_update = p1_fall
@@ -221,6 +322,7 @@ function p1_hover()
 	end
 	
 	if btn(0) then
+		p1.faceleft = true
 		local e = empty(p1.x-8,p1.y)
 		if e then
 			p1.dx = -1
@@ -231,6 +333,7 @@ function p1_hover()
 	end
 
 	if btn(1) then
+		p1.faceleft = false
 		local e = empty(p1.x+8,p1.y)
 		if e then
 			p1.dx = 1
@@ -262,6 +365,7 @@ function p1_bump_up()
 end
 
 function hit_block(x,y)
+	sfx(7)
 	x = x\8
 	y = y\8
 	if (x<0 or x>7) return
@@ -273,6 +377,7 @@ function hit_block(x,y)
 		return
 	end
 	mset(x,y,0)
+	make_explosion(x,y)
 	if (mget(x-1,y)%16==t) hit_block(8*(x-1),8*y)
 	if (mget(x+1,y)%16==t) hit_block(8*(x+1),8*y)
 	if (mget(x,y-1)%16==t) hit_block(8*x,8*(y-1))
@@ -307,7 +412,17 @@ function collide_p1_items()
 			elseif h.y < p1.y-3 then
 				kill_block(h)
 				air -= 20
-				freeze(5)
+				for i =1,10,1 do
+					p1.ix=24+((i\2)%2)
+					make_text_box("-20",8,p1.x+8,p1.y)
+					_draw()
+					flip()
+				end
+			--ride
+			elseif p1.y < h.y then
+				p1.other = h
+				p1_update = p1_hover
+				p1_update()
 			end
 		end
 	end
@@ -331,6 +446,7 @@ function get_air_tank(t)
 	air = min(100,air+25)
 	mset(t.x\8,t.y\8,0)
 	del(air_tanks,t)
+	make_text_box("+25","c",t.x-1,t.y-8)
 end
 
 function update_air_tanks()
@@ -340,7 +456,7 @@ function update_air_tanks()
 			mset(t.x\8,t.y\8,0)
 			t.timer-= 1
 			if t.timer <=0 then
-				t.y+=0.5
+				t.y+=1
 			end
 		else
 			t.timer=30
@@ -355,25 +471,58 @@ function add_hard_block(x,y)
 	block.y=y
 	block.timer=16
 	block.dmg = 0
+	block.update = hard_stand
+	block.falld = 0 --how far i fell
 	add(hard_blocks,block)
 end
 
 function update_hard_blocks()
 	for h in all(hard_blocks) do
-		local below = m8get(h.x,h.y+8)
-		if below==0 then
-			mset(h.x\8,h.y\8,0)
-			h.timer-= 1
-			if h.timer <=0 then
-				h.y+=0.5
-			end
-		else
-			h.timer=30
-			h.y = 8*(h.y\8)
-			mset(h.x\8,h.y\8,5+16*h.dmg)
-		end
+		h:update()
 	end
 end
+
+function hard_fall(h)
+	h.y += 1
+	h.falld += 1
+	local below = m8get(h.x,h.y+8)
+	if below > 0 then
+		h.update = hard_stand
+		h:update()
+		if h.falld > 10 then
+			hit_block(h.x,h.y+8)
+			h.dmg += 1
+			if (h.dmg>3) kill_block(h)
+		end
+		h.falld=0
+		return
+	end
+end
+
+function hard_hover(h)
+	mset(h.x\8,h.y\8,0)
+	h.timer-= 1
+	if h.timer <=0 then
+		h.update = hard_fall
+		h:update()
+		return
+	end
+end
+
+function hard_stand(h)
+	local below = m8get(h.x,h.y+8)
+	h.timer=30
+	if below==0 then
+		h.update = hard_hover
+		h:update()
+		return
+	else
+		h.timer=30
+		h.y = 8*(h.y\8)
+		mset(h.x\8,h.y\8,5+16*h.dmg)
+	end
+end
+
 
 function kill_block(h)
 	mset(h.x\8,h.y\8,0)
@@ -424,6 +573,36 @@ function freeze(n)
 		flip()
 	end
 end
+
+function test_animation()
+	poke(0x5f2c,3)
+	ix=8
+	ixmax=14
+	while true do
+		poke(0x5f2c,3)
+		cls(0)
+		spr(ix,10,10)
+		flip()
+		poke(0x5f2c,3)
+		ix+=1
+		if (ix>14) ix=8
+	end
+end
+
+function oprint(s,x,y,c1,c2)
+	for xx=x-1,x+1,1 do
+	for yy=y-1,y+1,1 do
+		print(s,xx,yy,c2)
+	end
+	end
+	print(s,x,y,c1)
+end
+
+function cprint(s,y,c1,c2)
+	length = #s*4
+	startx = 32 - (length\2)
+	oprint(s,startx,y,c1,c2)
+end
 -->8
 -- level
 
@@ -433,7 +612,7 @@ blockinfo[2] = {2,1}
 blockinfo[3] = {4,1}
 blockinfo[4] = {6,2}
 blockinfo[5] = {10,2}
-blockinfo[6] = {15,2}
+blockinfo[6] = {12,2}
 
 function make_level()
 	-- containers
@@ -457,6 +636,7 @@ function make_level()
 		info = blockinfo[min(level,6)]
 		amount,radius = info[1],info[2]
 		amount = amount-1+flr(rnd(3))
+		tries=0
 		while blockcount < amount do
 			xd = -radius + flr(rnd(2*radius + 1)) + x
 			xd = min(max(0,xd),7)
@@ -466,6 +646,8 @@ function make_level()
 				blockcount+=1
 				mset(xd,yd,0)
 			end
+			tries+=1
+			if (tries>100) break
 		end
 	end
 	for x=0,7,1 do
@@ -482,6 +664,9 @@ function make_level()
 			mset(x,y,t+adder)
 		end
 	end
+	for x=0,7,1 do
+		mset(x,100,7)
+	end
 end
 -->8
 -- game flow
@@ -493,43 +678,68 @@ function update_title()
 end
 
 function draw_title()
+	cy+=0.25
+	six += 0.25
+	if (six >= 14) six=8
+	cy = cy%(110*8)
 	cls()
-	color(7)
-	print("bitty dig",10,10)
-	print("⬆️⬇️⬅️➡️ to",1,20)
-	print("  start",1,27)
+	camera(0,cy)
+	map()
+	camera()
+	cprint("bitty dig",12,8,9)
+	oprint("⬆️⬇️⬅️➡️ to",10,44,8,0)
+	cprint("start",52,8,0)
+	
+	pal({0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0})
+	for x=27,29,1 do
+	for y=29,31,1 do
+		spr(six,x,y,1,1,true)
+	end
+	end
+	pal()
+	spr(six,28,30,1,1,true)
 end
 
 function start_game()
+	music(-1)
 	fade_out()
 	_draw = draw_game
 	_update60=update_game
 	init_level()
 	update_game()
 	fade_in()
+	music(0)
 end
 
 function fade_out()
-	for i=0,64,2 do
+	pal(4,-8,1)
+	for i=0,36,1 do
 		--_draw()
-		rectfill(0,0,64,i,2)
+		rectfill(32-i,32-i,32+i,32+i,4)
 		flip()
 	end
+	pal()
 end
 
 function fade_in()
-	for i=0,64,2 do
+	pal(4,-8,1)
+	for i=36,0,-1 do
 		_draw()
-		rectfill(0,0,64,64-i,2)
+		rectfill(32-i,32-i,32+i,32+i,4)
 		flip()
 	end
+	pal()
 end
 
 function start_title()
+	music(4)
 	level = 1
 	air = 100
 	_draw = draw_title
 	_update60 = update_title
+	make_level()
+	cy=0
+	six = 8
 end
 
 function start_gameover()
@@ -555,6 +765,7 @@ function draw_gameover()
 end
 
 function start_level_start()
+	music(-1)
 	fade_out()
 	level += 1
 	st = 0
@@ -569,26 +780,26 @@ function update_level_start()
 end
 
 function draw_level_start()
-	cls(2)
-	print("  level "..level,0,20,7)
+	cls(0)
+	cprint("level "..level,28,8,9)
 end
 __gfx__
-00000000ccccccccddddddddeeeeeeeeffffffff766666660007a000000000000000000000000000000000000000000070000000000000000000000000000000
-00888800ccccccccddddddddeeeeeeeeffffffff65555557007aaa00000000000000000000000000000011000000000007000000000000000000000000000000
-08181880ccccccccddddddddeeeeeeeeffffffff655555577aaaaaaa000000000000000000000000011777110000000007000000000000000000000000000000
-78181877ccccccccddddddddeeeeeeeeffffffff655555570aaaaaa0000000000000000000000001177000777110000007000000000000000000000000000000
-78888877ccccccccddddddddeeeeeeeeffffffff6555555700aaaa00000000000000000000000017700000077777020000700000000000000000000000000000
-08888880ccccccccddddddddeeeeeeeeffffffff6555555700aaaa00000000000000000000000070744477770070770000700000000000000000000000000000
-07888770ccccccccddddddddeeeeeeeeffffffff6555555707aaaaa0000000000000000000000704407700044788077777770000000000000000000000000000
-07700770ccccccccddddddddeeeeeeeeffffffff677777760aa00aa000000000000000000000074887888ddd887787bb70077700000000000000000000000000
-00000000111111112222222288888888bbbbbbbb766666660000000000000000000000000000784bb7bbb888874bb870b7770070000000000000000000000000
-00000000ccccccccddddddddeeeeeeeeffffffff65555557000000000000000600000000777784b673333887788048777b070007000000000000000000000000
-00000000ccccccccddddddddeeeeeeeeffffffff6555555700000000000000060000077700070087777778788778484701b77000000000000000000000000000
-00000000ccccccccddddddddeeeeeeeeffffffff655555570000000000000006000770002227277277778880b887884742177700000000000000000000000000
-00000000ccccccccddddddddeeeeeeeeffffffff6555555700000000000000060070000020777107788888888228888474217770000000000000000000000000
-00000000ccccccccddddddddeeeeeeeeffffffff655505570000000000000006007000027b7b873888078887888888887788707b000000000000000000000000
-00000000ccccccccddddddddeeeeeeeeffffffff6550555700000000000000060070002bb8780738802788888888888888287667000000000000000000000000
-00000000ccccccccddddddddeeeeeeeeffffffff6770777600000000000000060070002bb8700778772788888888888888487773000000000000000000000000
+09989980ccccccccddddddddeeeeeeeeffffffff766666660007a000222222220998998009989980099899800000000000000000099899800000000000000000
+99999998ccccccccddddddddeeeeeeeeffffffff65555557007aaa00288888289999999899999998999999980998998009989980999999980000000000000000
+08888940ccccccccddddddddeeeeeeeeffffffff655555577aaaaaaa288882280888894008888940088889409999999899999998088889400000000000000000
+78181876ccccccccddddddddeeeeeeeeffffffff655555570aaaaaa0288822287818187678181876018187600888876078888976781818760000000000000000
+78181876ccccccccddddddddeeeeeeeeffffffff6555555700aaaa00288222287818187678181876088187600181876078181876781818760000000000000000
+08888840ccccccccddddddddeeeeeeeeffffffff6555555700aaaa00282222280888876008888760088876400881884008181840088888400000000000000000
+07884760ccccccccddddddddeeeeeeeeffffffff6555555707aaaaa0222222280788476000884760008876000888764008888760078847600000000000000000
+07600760ccccccccddddddddeeeeeeeeffffffff677777760aa00aa0288888880760000000760000007600000088760007888760076007600000000000000000
+00000000111111112222222288888888bbbbbbbb7666666600000000000000000998998000000000099899800977798009989980000000000000000000000000
+00000000ccccccccddddddddeeeeeeeeffffffff6555555700000000000000069999999809989980999999989966699899999998000000000000000000000000
+00000000ccccccccddddddddeeeeeeeeffffffff6555555700000000000000067888897699999998089888400866884008988840000000000000000000000000
+00000000ccccccccddddddddeeeeeeeeffffffff6555555700000000000000067818187608888760768888400888884008888840000000000000000000000000
+00000000ccccccccddddddddeeeeeeeeffffffff6555555700000000000000060818184008181760766888400888884008888840000000000000000000000000
+00000000ccccccccddddddddeeeeeeeeffffffff6555055700000000000000067888876008181840766876400888764008866840000000000000000000000000
+00000000ccccccccddddddddeeeeeeeeffffffff6550555700000000000000067688476078888760008876000088760000666876000000000000000000000000
+00000000ccccccccddddddddeeeeeeeeffffffff6770777600000000000000060000000076884760007600000076000000777076000000000000000000000000
 000000001ccccccc2ddddddd8eeeeeeebfffffff766666660000000000000000607002b4b87222787277888888888888878774b3000000000000000000000000
 000000001ccccccc2ddddddd8eeeeeeebfffffff6555555700000000000000006070020008720b7888b7888888888888887774b3000000000000000000000000
 000000001ccccccc2ddddddd8eeeeeeebfffffff65555557000000000000000000000207b07200778883888888888888887378b3000000000000000000000000
@@ -622,3 +833,20 @@ __gfx__
 000000000000000000000000000000000000000000000000000000000000000000000000000000000000cc000006000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000060000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000666600000000000000000000000000000000000000
+__sfx__
+010e00000f4520f4520040216402134020040200402004020a4520a4521640200402004021b4021b402004020c4520c452184020f4520f4521b4020a4520a45216402164020c4021340200402114021140216402
+000e0000114521145200402164020c4520a4020f452004020c4520c4521640200402004021b4021b402004020f4520f4521840211452114521b402114521145216402164020c4021340200402114021140216402
+000e0000164521645200402164020c4020a4020f4020040213452134521640200402004021b4021b4020040211452114521840211402114021b4020c4020c4020f4520f4520c4021340200402114021140211402
+010e00001145211452114421144211432114321143211432114221142211422114221141211412114121141200000000000000000000000000000000000000000000000000000000000000000000000000000000
+900e00001f15300100001032410324153221032215322103221530010300103001032415322103221532210322153001030010300103241532210322153221032215300103001030010300103001030010300103
+900e00001f15300100001032410324153221032215322103221530010300103001032415322103221532210322153241532215300103221532415322153221032215300103001030010300103001030010300103
+050e0000111530010300103001030f1530c10300103001030c1530010300103001030a153001030010300103111530010300103001030f1530c10300103001030c1530010300103001030a153001030010300103
+150400000a731337312473116731137310f7310b73325703007010070100701007010070100701007010070100701007010070100701007010070100701007010070100701007010070100701007010070100700
+__music__
+01 00040644
+00 01050644
+00 02040644
+02 03050644
+01 04064344
+02 05064344
+
