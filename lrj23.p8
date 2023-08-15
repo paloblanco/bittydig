@@ -811,7 +811,7 @@ end
 function draw_gameover()
 	cls()
 	cprint("game over",24,7,8)
-	depth = (level-1)*100 +flr(p1.y)
+	depth = (level-1)*100 +flr(p1.y\8)
 	cprint("depth: "..depth.." m",40,7,1)
 end
 
